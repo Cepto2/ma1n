@@ -1,0 +1,615 @@
+-- [[ 📥Core variable initialization ]]
+_G.fKN = _G.fKN or "PageDown"           
+_G.freezeMS = _G.freezeMS or 300      
+_G.isMinimized = _G.isMinimized or false 
+_G.toggleKey = _G.toggleKey or Enum.KeyCode.R
+_G.spinSpeed = _G.spinSpeed or 10
+_G.freeze = false
+_G.freezeRadius = _G.freezeRadius or 50
+
+local p = game:GetService("Players").LocalPlayer
+local UIS = game:GetService("UserInputService")
+local SG = game:GetService("StarterGui")
+local VIM = game:GetService("VirtualInputManager")
+local RS = game:GetService("RunService")
+local VU = game:GetService("VirtualUser")
+local Cam = workspace.CurrentCamera
+local DC_CODE = "PZcXtUk9Sf"
+local DC_URL = "https://discord.gg/" .. DC_CODE
+local BG_IMAGE_ID = "rbxassetid://117164248667049"
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local isPressing = false
+local TS = game:GetService("TweenService") -- 🎬 引入 TweenService 用來做動畫
+
+
+-- [[ 🖥️ 介面處理核心 - 動畫升級版 ]]
+local function createUI()
+    if p.PlayerGui:FindFirstChild("E5_Console") then p.PlayerGui.E5_Console:Destroy() end
+    local sg = Instance.new("ScreenGui", p.PlayerGui)
+    sg.Name, sg.ResetOnSpawn, sg.DisplayOrder = "E5_Console", false, 999
+    
+    -- 主視窗
+    local m = Instance.new("Frame", sg)
+    m.Size = _G.isMinimized and UDim2.new(0, 100, 0, 30) or UDim2.new(0, 400, 0, 430)
+    m.Position = UDim2.new(0, 210, 0, -40) 
+    m.BackgroundColor3, m.BackgroundTransparency, m.BorderSizePixel = Color3.new(0,0,0), 0.5, 0
+    m.Active, m.Draggable = true, true
+    Instance.new("UICorner", m)
+
+    local bg = Instance.new("ImageLabel", m)
+    bg.Size, bg.Image, bg.ScaleType = UDim2.new(1, 0, 1, 0), BG_IMAGE_ID, Enum.ScaleType.Stretch
+    bg.BackgroundTransparency, bg.Visible = 1, not _G.isMinimized
+
+    -- 標題拖曳條
+    local bar = Instance.new("Frame", m)
+    bar.Size, bar.BackgroundColor3, bar.ZIndex = UDim2.new(1, 0, 0, 30), Color3.new(0.05, 0.05, 0.05), 5
+    Instance.new("UICorner", bar)
+    
+    local xBtn = Instance.new("TextButton", bar)
+    xBtn.Size, xBtn.Position, xBtn.Text = UDim2.new(0, 30, 0, 30), UDim2.new(1, -30, 0, 0), "X"
+    xBtn.TextColor3, xBtn.BackgroundTransparency, xBtn.ZIndex, xBtn.TextSize = Color3.new(1, 0.2, 0.2), 1, 6, 18
+    xBtn.MouseButton1Click:Connect(function() sg:Destroy() end)
+
+    local minBtn = Instance.new("TextButton", bar)
+    minBtn.Size, minBtn.Position, minBtn.Text = UDim2.new(0, 30, 0, 30), UDim2.new(1, -60, 0, 0), _G.isMinimized and "+" or "-"
+    minBtn.TextColor3, minBtn.BackgroundTransparency, minBtn.ZIndex, minBtn.TextSize = Color3.new(1, 1, 1), 1, 6, 18
+
+    -- 主要內容容器 (包裝 Tabs 與 Pages)
+    local uiContainer = Instance.new("Frame", m)
+    uiContainer.Size, uiContainer.Position = UDim2.new(1, 0, 1, -30), UDim2.new(0, 0, 0, 30)
+    uiContainer.BackgroundTransparency, uiContainer.Visible = 1, not _G.isMinimized
+    uiContainer.ClipsDescendants = true -- 🎬 防止滑動動畫超出視窗邊界
+
+    -- [ 左側 Tabs 分頁欄 ]
+    local sidebar = Instance.new("ScrollingFrame", uiContainer)
+    sidebar.Size, sidebar.BackgroundColor3 = UDim2.new(0, 120, 1, 0), Color3.new(0.05, 0.05, 0.05)
+    sidebar.BackgroundTransparency, sidebar.ScrollBarThickness = 0.5, 2
+    
+    local sidebarLayout = Instance.new("UIListLayout", sidebar)
+    sidebarLayout.Padding = UDim.new(0, 2)
+    sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- [ 右側 Pages 內容區 ]
+    local pageContainer = Instance.new("Frame", uiContainer)
+    pageContainer.Size, pageContainer.Position = UDim2.new(1, -125, 1, -5), UDim2.new(0, 125, 0, 5)
+    pageContainer.BackgroundTransparency = 1
+
+    -- [ 最小化邏輯 ]
+    minBtn.MouseButton1Click:Connect(function()
+        _G.isMinimized = not _G.isMinimized
+        m.Size = _G.isMinimized and UDim2.new(0, 100, 0, 30) or UDim2.new(0, 400, 0, 430)
+        bg.Visible = not _G.isMinimized
+        uiContainer.Visible = not _G.isMinimized
+        minBtn.Text = _G.isMinimized and "+" or "-"
+    end)
+
+    -- ==========================================
+    -- 🛠️ UI Helper functions
+    -- ==========================================
+    local tabs = {}
+    local pages = {}
+
+    local function createTab(tabName)
+        local tabBtn = Instance.new("TextButton", sidebar)
+        tabBtn.Size, tabBtn.Text = UDim2.new(1, 0, 0, 45), tabName
+        tabBtn.BackgroundColor3, tabBtn.TextColor3 = Color3.new(0, 0, 0), Color3.new(0.6, 0.6, 0.6)
+        tabBtn.BackgroundTransparency = 0.3
+        tabBtn.Font, tabBtn.TextSize, tabBtn.TextWrapped = Enum.Font.GothamSemibold, 12, true
+
+        local page = Instance.new("ScrollingFrame", pageContainer)
+        page.Size, page.CanvasSize = UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0)
+        page.Position = UDim2.new(0, 0, 0, 0)
+        page.BackgroundTransparency, page.ScrollBarThickness = 1, 4
+        page.Visible, page.AutomaticCanvasSize = false, Enum.AutomaticSize.Y
+
+        local pageLayout = Instance.new("UIListLayout", page)
+        pageLayout.Padding = UDim.new(0, 8)
+        pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+        table.insert(tabs, tabBtn)
+        table.insert(pages, page)
+
+        tabBtn.MouseButton1Click:Connect(function()
+            -- 隱藏所有頁面並重置按鈕顏色
+            for _, p in ipairs(pages) do p.Visible = false end
+            for _, t in ipairs(tabs) do 
+                t.TextColor3 = Color3.new(0.6, 0.6, 0.6)
+                t.BackgroundColor3 = Color3.new(0,0,0) 
+            end
+            
+            -- 顯示當前頁面與按鈕變色
+            page.Visible = true
+            tabBtn.TextColor3 = Color3.new(1, 1, 1)
+            tabBtn.BackgroundColor3 = Color3.fromRGB(70, 90, 110)
+
+            -- 🎬 執行動畫：先將頁面退後 50 像素，再平滑滑動回原本位置 (0,0)
+            page.Position = UDim2.new(0, 50, 0, 0) 
+            local slideTween = TS:Create(page, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0, 0, 0, 0)
+            })
+            slideTween:Play()
+        end)
+
+        return page
+    end
+
+    local function createButton(parentPage, text, callback)
+        local btn = Instance.new("TextButton", parentPage)
+        btn.Size = UDim2.new(1, -10, 0, 40) 
+        btn.Text = text
+        btn.BackgroundColor3, btn.TextColor3 = Color3.new(0,0,0), Color3.new(1,1,1)
+        btn.BackgroundTransparency = 0.6
+        btn.Font, btn.TextSize, btn.TextWrapped = Enum.Font.Gotham, 13, true
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        
+        btn.MouseButton1Click:Connect(callback)
+        return btn
+    end
+
+    -- ==========================================
+    -- 📝 Add your categories and buttons here!
+    -- ==========================================
+
+    -- 📁 分類一：Player and movement
+    local pagePlayer = createTab("Player & Movement")
+    
+    -- =========================================
+    -- 🪄 Grid layout：Player & Movement
+    -- =========================================
+    for _, child in pairs(pagePlayer:GetChildren()) do
+        if child:IsA("UIListLayout") then
+            child:Destroy()
+        end
+    end
+    local gridPlayer = Instance.new("UIGridLayout", pagePlayer)
+    gridPlayer.CellSize = UDim2.new(0.5, -5, 0, 35)
+    gridPlayer.CellPadding = UDim2.new(0, 10, 0, 10)
+    gridPlayer.SortOrder = Enum.SortOrder.LayoutOrder
+
+    gridPlayer:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        if pagePlayer:IsA("ScrollingFrame") then
+            pagePlayer.CanvasSize = UDim2.new(0, 0, 0, gridPlayer.AbsoluteContentSize.Y + 20)
+        end
+    end)
+
+
+	-- [ Headless ]
+    local headlessBtn
+    headlessBtn = createButton(pagePlayer, "Headless", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/headless/refs/heads/main/headless"))() end)
+    end)
+
+	createButton(pagePlayer, "Bhop", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/auto-jump/refs/heads/main/auto%20jump"))() end)
+    end)
+
+    -- [ Left Korblox ]
+    local leftKBtn
+    leftKBtn = createButton(pagePlayer, "Left Korblox", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/leftkorblox/refs/heads/main/leftkorblox"))() end)
+    end)
+	
+	-- [ Right Korblox ]
+    local rightKBtn
+    rightKBtn = createButton(pagePlayer, "Right Korblox", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/rightkorblox/a2ec2f46bc369b1110337d8f543b083301efcfb3/rightkorblox"))() end)
+    end)
+	
+    -- [ 1. TOOL 按鈕 ]
+    createButton(pagePlayer, "TOOL", function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/TOOL"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/LS"))()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/spin"))() end)
+        
+        -- 通知系統
+        pcall(function()
+            game.StarterGui:SetCore("SendNotification", {
+                Title = "TOOL";
+                Text = "Freeze Window & Spin Loaded!";
+                Duration = 3;
+            })
+        end)
+    end)
+
+	-- [ Zombie 按鈕 ]
+    _G.zbClickCount = _G.zbClickCount or 0
+    local zbBtn
+    zbBtn = createButton(pagePlayer, "Zombie", function()
+        if _G.zbClickCount >= 2 then return end 
+        _G.zbClickCount = _G.zbClickCount + 1
+
+        if _G.zbClickCount == 1 then
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/zb"))() end)
+        elseif _G.zbClickCount == 2 then
+            pcall(function() game:GetService("ReplicatedStorage").Items.Emotes.DeadBoneStride.Name = "SwagWalk" end)
+            task.spawn(startSwagMusic) -- 確保 startSwagMusic 已在其他地方定義
+        end
+
+        -- 更新按鈕外觀
+        if _G.zbClickCount == 0 then zbBtn.Text = "Zombie"
+        elseif _G.zbClickCount == 1 then zbBtn.Text = "Violin"
+        else zbBtn.Text = "DONE"; zbBtn.TextColor3 = Color3.new(0.5, 0.5, 0.5) end
+    end)
+    -- 初始化按鈕外觀
+    if _G.zbClickCount == 0 then zbBtn.Text = "Zombie"
+    elseif _G.zbClickCount == 1 then zbBtn.Text = "Violin"
+    else zbBtn.Text = "DONE"; zbBtn.TextColor3 = Color3.new(0.5, 0.5, 0.5) end
+
+	-- [ 2. Spin KEY 綁定按鈕 ]
+    -- 💡 確保 _G.toggleKey 有預設值避免報錯 (這裡預設為 R 鍵，你可以改)
+    _G.toggleKey = _G.toggleKey or Enum.KeyCode.R 
+
+    local spinKeyBtn
+    spinKeyBtn = createButton(pagePlayer, "Spin KEY: " .. _G.toggleKey.Name, function()
+        spinKeyBtn.Text = "..." -- 點擊後提示正在等待輸入
+        
+        local con
+        con = UIS.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.Keyboard then
+                _G.toggleKey = i.KeyCode
+                spinKeyBtn.Text = "Spin KEY: " .. _G.toggleKey.Name -- 更新按鈕文字
+                
+                -- 使用 Roblox 內建的通知系統
+                pcall(function()
+                    game.StarterGui:SetCore("SendNotification", {
+                        Title = "KEYBIND";
+                        Text = "Spin Key set to: " .. _G.toggleKey.Name;
+                        Duration = 3;
+                    })
+                end)
+                
+                con:Disconnect() -- 綁定完成後關閉監聽
+            end
+        end)
+    end)
+	
+	-- [ 3. Spin SPEED 輸入框 ]
+    _G.spinSpeed = _G.spinSpeed or 10
+
+    local speedBox = Instance.new("TextBox", pagePlayer)
+    speedBox.Size = UDim2.new(1, -10, 0, 40) -- 自動排版，寬度與其他按鈕一致
+    speedBox.PlaceholderText = "Enter Spin Speed..."
+    speedBox.Text = tostring(_G.spinSpeed)
+    speedBox.BackgroundColor3, speedBox.TextColor3 = Color3.new(0, 0, 0), Color3.new(1, 1, 0) -- 保留你設定的黃色字體
+    speedBox.BackgroundTransparency = 0.7
+    speedBox.Font, speedBox.TextSize = Enum.Font.Gotham, 14
+    Instance.new("UICorner", speedBox).CornerRadius = UDim.new(0, 4)
+
+    speedBox.FocusLost:Connect(function(enterPressed)
+        -- tonumber() 會檢查輸入的是不是數字
+        local val = tonumber(speedBox.Text)
+        
+        if val then
+            _G.spinSpeed = val
+            
+            -- 替換為 Roblox 內建通知
+            pcall(function()
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "SYSTEM";
+                    Text = "Spin Speed set to: " .. _G.spinSpeed;
+                    Duration = 3;
+                })
+            end)
+        else
+            -- 如果輸入的不是數字（例如輸入了英文字母），就恢復成原本的數字
+            speedBox.Text = tostring(_G.spinSpeed or 10)
+        end
+    end)
+
+-- [ JumpCap 系統 ]
+    _G.JumpCap = _G.JumpCap or 2
+
+    -- 1. 提前宣告變數，這樣按鈕才不會找不到東西
+    local capBox 
+
+    -- 2. 先建立按鈕 (這樣在網格排版中，它就會出現在左邊/前面)
+    createButton(pagePlayer, "Jump cap", function()
+        -- 確保 capBox 已經被建立後才讀取
+        local num = capBox and tonumber(capBox.Text)
+        
+        if num then
+            _G.JumpCap = num
+        end
+
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Jump System",
+            Text = "Triggering Toggle...", 
+            Duration = 1.5
+        })
+
+        pcall(function() 
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/jumpcap/08bc60377ac847d03e644758dd700fc5f611433e/jumpcap"))() 
+        end)
+        
+        if not num and capBox then
+            capBox.Text = tostring(_G.JumpCap or 2)
+        end
+    end)
+
+    -- 3. 後建立輸入框 (它會緊接在按鈕的右邊/後面)
+    capBox = Instance.new("TextBox", pagePlayer)
+    capBox.Size = UDim2.new(1, -10, 0, 40)
+    capBox.Text = tostring(_G.JumpCap)
+    capBox.PlaceholderText = "Cap..."
+    capBox.BackgroundColor3, capBox.TextColor3 = Color3.new(0,0,0), Color3.new(1,1,1)
+    capBox.BackgroundTransparency = 0.7
+    capBox.Font, capBox.TextSize = Enum.Font.Gotham, 14
+    Instance.new("UICorner", capBox).CornerRadius = UDim.new(0, 4)
+
+    capBox.FocusLost:Connect(function()
+        local val = tonumber(capBox.Text)
+        if val then _G.JumpCap = val else capBox.Text = tostring(_G.JumpCap) end
+    end)
+
+	-- [ Freeze KEY 綁定按鈕 ]
+    _G.fKN = _G.fKN or "PageDown"
+
+    local freezeKeyBtn
+    freezeKeyBtn = createButton(pagePlayer, _G.fKN, function()
+        freezeKeyBtn.Text = "..."
+        local con; con = UIS.InputBegan:Connect(function(i) 
+            if i.UserInputType == Enum.UserInputType.Keyboard then 
+                _G.fKN = i.KeyCode.Name
+                freezeKeyBtn.Text = _G.fKN
+                con:Disconnect() 
+                
+                pcall(function()
+                    game.StarterGui:SetCore("SendNotification", {
+                        Title = "SYSTEM"; Text = "Freeze Key: " .. _G.fKN; Duration = 3;
+                    })
+                end)
+            end 
+        end)
+    end)
+
+	-- [ Freeze MS 輸入框 ]
+    _G.freezeMS = _G.freezeMS or 0
+
+    local msBox = Instance.new("TextBox", pagePlayer)
+    msBox.Size = UDim2.new(1, -10, 0, 40)
+    msBox.Text = tostring(_G.freezeMS)
+    msBox.PlaceholderText = "MS..."
+    msBox.BackgroundColor3, msBox.TextColor3 = Color3.new(0,0,0), Color3.new(1,1,0) -- 保留黃色字
+    msBox.BackgroundTransparency = 0.7
+    msBox.Font, msBox.TextSize = Enum.Font.Gotham, 14
+    Instance.new("UICorner", msBox).CornerRadius = UDim.new(0, 4)
+
+    msBox.FocusLost:Connect(function()
+        local val = tonumber(msBox.Text)
+        if val then 
+            _G.freezeMS = val
+            pcall(function()
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "SYSTEM"; Text = "MS: " .. _G.freezeMS; Duration = 3;
+                })
+            end)
+        else
+            msBox.Text = tostring(_G.freezeMS)
+        end
+    end)
+
+	createButton(pagePlayer, "Recorder", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/evadeTAS/refs/heads/main/TAS"))() end)
+    end)
+	
+	-- [ Freeze Radius 輸入框 ]
+    _G.freezeRadius = _G.freezeRadius or 50
+
+	local radiusBox = Instance.new("TextBox", pagePlayer)
+    radiusBox.Size = UDim2.new(1, -10, 0, 40)
+    radiusBox.Text = tostring(_G.freezeRadius)
+    radiusBox.PlaceholderText = "Radius..."
+    radiusBox.BackgroundColor3 = Color3.new(0, 0, 0)
+    radiusBox.TextColor3 = Color3.new(1, 0.5, 0) -- 這裡我設定為橘色，方便跟 msBox 的黃色區隔
+    radiusBox.BackgroundTransparency = 0.7
+    radiusBox.Font = Enum.Font.Gotham
+    radiusBox.TextSize = 14
+    Instance.new("UICorner", radiusBox).CornerRadius = UDim.new(0, 4)
+
+	radiusBox.FocusLost:Connect(function()
+        local val = tonumber(radiusBox.Text)
+        if val then 
+            _G.freezeRadius = val
+            pcall(function()
+                game.StarterGui:SetCore("SendNotification", {
+                    Title = "SYSTEM"; 
+                    Text = "Radius: " .. _G.freezeRadius; 
+                    Duration = 3;
+                })
+            end)
+        else
+            -- 如果玩家輸入非數字(例如英文字母)，就恢復成原本的數字
+            radiusBox.Text = tostring(_G.freezeRadius)
+        end
+    end)
+	
+	-- [ DisplayFPS(RE) 按鈕 ]
+    local fpsBtn = createButton(pagePlayer, "DisplayFPS(RE)", function()
+        pcall(function() setfflag("DebugDisplayFPS", "true") end)
+        game:GetService("TeleportService"):Teleport(game.PlaceId, p)
+    end)
+    fpsBtn.TextColor3 = Color3.new(0, 1, 1) -- 青色字體
+
+	-- [ Missedworld(RE) 按鈕 ]
+    local sBtn = createButton(pagePlayer, "Missedworld(RE)", function()
+        pcall(function() setfflag("MaxMissedWorldStepsRemembered", "2147483467") end)
+        game:GetService("TeleportService"):Teleport(game.PlaceId, p)
+    end)
+    sBtn.TextColor3 = Color3.new(0, 1, 0) -- 綠色字體
+
+	-- 📁 分類二：Entertainment function
+    local pageEntertain = createTab("Entertainment")
+    
+    -- =========================================
+    -- 🪄 網格排版：Entertainment
+    -- =========================================
+    for _, child in pairs(pageEntertain:GetChildren()) do
+        if child:IsA("UIListLayout") then
+            child:Destroy()
+        end
+    end
+    local gridEntertain = Instance.new("UIGridLayout", pageEntertain)
+    gridEntertain.CellSize = UDim2.new(0.5, -5, 0, 35) 
+    gridEntertain.CellPadding = UDim2.new(0, 10, 0, 10)
+    gridEntertain.SortOrder = Enum.SortOrder.LayoutOrder
+
+    gridEntertain:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        if pageEntertain:IsA("ScrollingFrame") then
+            pageEntertain.CanvasSize = UDim2.new(0, 0, 0, gridEntertain.AbsoluteContentSize.Y + 20)
+        end
+    end)
+
+    -- [ Sky 按鈕 ]
+    if _G.skyState == nil then _G.skyState = 0 end
+    local skyBtn
+    local function updateSkyStyle()
+        skyBtn.Text = _G.skyEnabled and "Sky: ON" or "Sky: OFF"
+        skyBtn.TextColor3 = _G.skyEnabled and Color3.new(0, 1, 0) or Color3.new(1, 1, 1)
+    end
+
+    -- ⬇️ 這裡改成 pageEntertain
+    skyBtn = createButton(pageEntertain, "Sky: OFF", function()
+        if _G.skyState == 1 then
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/blackhole"))() end)
+        elseif _G.skyState == 2 then
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/MilkyWay"))() end)
+        elseif _G.skyState == 3 then
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/Jupiter"))() end)
+        elseif _G.skyState == 4 then
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/universe"))() end)
+        elseif _G.skyState == 5 then
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/SUN"))() end)
+        end
+
+        _G.skyState = (_G.skyState + 1) % 6
+
+        if _G.skyState == 0 then
+            _G.skyEnabled = false
+        elseif _G.skyState == 1 then
+            _G.skyEnabled = true
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/blackhole"))() end)
+        elseif _G.skyState == 2 then
+            _G.skyEnabled = true
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/MilkyWay"))() end)
+        elseif _G.skyState == 3 then
+            _G.skyEnabled = true
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/Jupiter"))() end)
+        elseif _G.skyState == 4 then
+            _G.skyEnabled = true
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/universe"))() end)
+        elseif _G.skyState == 5 then
+            _G.skyEnabled = true
+            pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/E5alR9/E5s/refs/heads/main/SUN"))() end)
+        end
+
+        updateSkyStyle()
+    end)
+    updateSkyStyle() -- 初始化
+
+    -- ⬇️ 以下全部改成 pageEntertain
+    createButton(pageEntertain, "Boombox", function()
+        pcall(function() loadstring(game:HttpGet("https://pastebin.com/raw/SnPNQGSf"))() end)
+    end)
+
+    createButton(pageEntertain, "Grey Fog", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/greyfog/refs/heads/main/greyfog"))() end)
+    end)
+
+    createButton(pageEntertain, "Remove", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/removeinwall/refs/heads/main/removeinwall"))() end)
+    end)
+
+    createButton(pageEntertain, "Time Ctrl", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/timechanger/refs/heads/main/timecontrol"))() end)
+    end)
+
+    createButton(pageEntertain, "Visual", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/renamer/refs/heads/main/visuals"))() end)
+    end)
+
+    createButton(pageEntertain, "Recorder", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/evadeTAS/refs/heads/main/TAS"))() end)
+    end)
+
+    createButton(pageEntertain, "Edge", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/ezedge/refs/heads/main/ezedge"))() end)
+    end)
+
+	createButton(pageEntertain, "Shader", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/shader/refs/heads/main/shader"))() end)
+    end)
+
+	createButton(pageEntertain, "Afk farm", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/afkfarm/refs/heads/main/afk"))() end)
+    end)
+
+	-- 初始化 Sky ID
+    _G.skyid = _G.skyid or 654808887 
+
+    -- 1. 提前宣告變數，確保按鈕能讀取到
+    local skyIdBox 
+
+    -- 2. 先建立按鈕 (排版會在左邊/前面)
+    createButton(pageEntertain, "skybox", function()
+        pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/Cepto2/skybox/refs/heads/main/skybox"))() end)
+    end)
+
+    -- 3. 後建立輸入框 (排版會在按鈕的右邊/後面)
+    skyIdBox = Instance.new("TextBox", pageEntertain)
+    skyIdBox.Size = UDim2.new(1, -10, 0, 40)
+    skyIdBox.Text = tostring(_G.skyid)
+    skyIdBox.PlaceholderText = "ID..."
+    
+    -- 🎨 外觀設定 (青色字體)
+    skyIdBox.BackgroundColor3, skyIdBox.TextColor3 = Color3.new(0,0,0), Color3.new(0,1,1)
+    skyIdBox.BackgroundTransparency = 0.7
+    skyIdBox.Font, skyIdBox.TextSize = Enum.Font.Gotham, 14
+    Instance.new("UICorner", skyIdBox).CornerRadius = UDim.new(0, 4)
+
+    -- 4. 當玩家輸入完畢並點擊外面時觸發
+    skyIdBox.FocusLost:Connect(function()
+        local val = tonumber(skyIdBox.Text)
+        if val then 
+            _G.skyid = val 
+        else 
+            skyIdBox.Text = tostring(_G.skyid) 
+        end
+    end)
+
+
+
+
+    -- ==========================================
+    -- 初始化：預設開啟第一個分頁
+    -- ==========================================
+    if tabs[1] and pages[1] then
+        tabs[1].TextColor3 = Color3.new(1, 1, 1)
+        tabs[1].BackgroundColor3 = Color3.fromRGB(70, 90, 110)
+        pages[1].Visible = true
+        pages[1].Position = UDim2.new(0, 0, 0, 0) -- 確保初始位置正確
+    end
+end
+
+-- [[ 全局事件綁定 (啟動與 Insert 鍵開關) ]]
+local function ensureUI()
+    if not p.PlayerGui:FindFirstChild("E5_Console") then createUI() end
+end
+
+ensureUI()
+p.CharacterAdded:Connect(function()
+    task.wait(1) 
+    ensureUI()
+end)
+
+UIS.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Enum.KeyCode.Insert then
+        if p.PlayerGui:FindFirstChild("E5_Console") then
+            p.PlayerGui.E5_Console.Enabled = not p.PlayerGui.E5_Console.Enabled
+        else
+            ensureUI()
+        end
+    end
+end)
